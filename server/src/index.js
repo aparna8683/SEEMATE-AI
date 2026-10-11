@@ -62,9 +62,30 @@ async function invokeFormatReadingResponse({ extractedText, context = '', readAl
 
 export function createApp() {
   const app = express()
-  const allowedOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173'
+  const defaultOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173']
+  const configuredOrigins = (process.env.CLIENT_ORIGIN || process.env.CLIENT_ORIGINS || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean)
 
-  app.use(cors({ origin: allowedOrigin }))
+  const allowedOrigins = [...new Set([...defaultOrigins, ...configuredOrigins])]
+
+  app.use(cors({
+    origin(origin, callback) {
+      if (!origin) {
+        return callback(null, true)
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true)
+      }
+
+      return callback(new Error(`Origin not allowed by CORS: ${origin}`))
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  }))
   app.use(express.json({ limit: '1mb' }))
 
   app.get('/health', (_req, res) => {
@@ -142,9 +163,9 @@ const app = createApp()
 const port = Number(process.env.PORT || 5000)
 
 if (process.argv[1] && process.argv[1].endsWith('index.js')) {
-  app.listen(port, () => {
-    console.log(`SeeMate API listening at http://localhost:${port}`)
-    console.log(`MCP streamable HTTP endpoint ready at http://localhost:${port}/mcp`)
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`SeeMate API listening at http://0.0.0.0:${port}`)
+    console.log(`MCP streamable HTTP endpoint ready at http://0.0.0.0:${port}/mcp`)
   })
 }
 
