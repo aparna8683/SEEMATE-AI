@@ -62,8 +62,9 @@ async function invokeFormatReadingResponse({ extractedText, context = '', readAl
 
 export function createApp() {
   const app = express()
-  const prodOrigin = 'https://seemate-rjpbavylm-aparnas-projects-ab6e250b.vercel.app'
-  const defaultOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173', prodOrigin]
+  const prodOrigin = 'https://seemate-ai.vercel.app'
+  const previewOrigin = 'https://seemate-rjpbavylm-aparnas-projects-ab6e250b.vercel.app'
+  const defaultOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173', previewOrigin, prodOrigin]
   const configuredOrigins = (process.env.CLIENT_ORIGIN || process.env.CLIENT_ORIGINS || '')
     .split(',')
     .map(value => value.trim())
