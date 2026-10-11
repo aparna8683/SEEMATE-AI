@@ -437,6 +437,37 @@ export default function App() {
     window.speechSynthesis.speak(utterance)
   }
 
+  async function callAppReadTextApi(extractedText, context = 'selected photo') {
+    const response = await fetch(`${API_URL}/api/read-text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        extractedText,
+        context,
+        readAloud: true,
+        preserveUncertainty: true
+      })
+    })
+
+    let payload = {}
+    try {
+      payload = await response.json()
+    } catch (error) {
+      console.warn('App API response was not JSON.', error)
+    }
+
+    if (!response.ok) {
+      throw new Error(payload?.error || 'The reading service could not process the extracted text.')
+    }
+
+    const readingText = typeof payload?.reading === 'string' ? payload.reading.trim() : ''
+    if (!readingText) {
+      throw new Error('The reading service returned an empty response.')
+    }
+
+    return readingText
+  }
+
   async function readText() {
     if (!imageFile) {
       setStatus('Please choose a photo first.')
@@ -456,21 +487,33 @@ export default function App() {
       const result = await recognizePreparedText(imageFile, '6')
       const extracted = result.text
       const confidence = result.confidence
-      setText(extracted)
       setOcrConfidence(confidence)
 
       if (!extracted) {
+        setText('')
         setStatus('I could not find readable text. Try moving closer, improving the light, and taking another photo.')
         speak('I could not find readable text. Try moving closer and improving the light.')
-      } else {
+        return
+      }
+
+      let readingText = extracted
+      try {
+        readingText = await callAppReadTextApi(extracted, 'selected photo')
+        setText(readingText)
+
         if (confidence < 60) {
           const warning = 'OCR confidence is low. Please verify the result against the original label or cover.'
           setStatus(`Text extraction finished. ${warning}`)
-          speak(`${warning} ${extracted}`)
+          speak(`${warning} ${readingText}`)
         } else {
           setStatus('Text extraction finished. Please verify the result, especially for important information.')
-          speak(extracted)
+          speak(readingText)
         }
+      } catch (error) {
+        console.error('Backend MCP reading failed:', error)
+        setText(extracted)
+        setStatus('The reading service failed. The local OCR text is shown below, but please verify important details manually.')
+        speak(`The reading service failed. ${extracted}`)
       }
     } catch (error) {
       console.error(error)

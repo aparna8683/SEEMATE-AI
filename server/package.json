@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "build": "node --check src/index.js && node --check src/mcpServer.js && node --check src/mcpClientTest.js",
-    "test:mcp": "node src/mcpClientTest.js"
+    "build": "node --check src/index.js && node --check src/mcpServer.js && node --check src/mcpClientTest.js && node --check src/appMcpIntegrationTest.js",
+    "test:mcp": "node src/mcpClientTest.js",
+    "test:integration": "node src/appMcpIntegrationTest.js"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.3.1",
