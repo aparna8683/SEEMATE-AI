@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { recognize } from 'tesseract.js'
-import { recognizeWithPaddleOcr } from './paddleOcrAdapter'
+import { recognizeWithPaddleOcr, disposePaddleOcrEngine } from './paddleOcrAdapter'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 
@@ -18,11 +18,13 @@ export default function App() {
   const streamRef = useRef(null)
   const cameraCheckInProgressRef = useRef(false)
   const lastCameraMessageRef = useRef('')
+  const cachedOcrRef = useRef({ imageKey: '', result: null })
 
   useEffect(() => {
-    return () => {
+    return async () => {
       if (imageUrl) URL.revokeObjectURL(imageUrl)
       stopCamera()
+      await disposePaddleOcrEngine()
     }
   }, [imageUrl])
 
@@ -78,6 +80,24 @@ export default function App() {
     }
   }
 
+  function getImageKey(file) {
+    if (!file) return ''
+    return `${file.name}-${file.size}-${file.lastModified}`
+  }
+
+  function getCachedOcrResult(file) {
+    const imageKey = getImageKey(file)
+    if (!imageKey) return null
+    if (cachedOcrRef.current.imageKey !== imageKey) return null
+    return cachedOcrRef.current.result
+  }
+
+  function setCachedOcrResult(file, result) {
+    const imageKey = getImageKey(file)
+    if (!imageKey) return
+    cachedOcrRef.current = { imageKey, result }
+  }
+
   function handleImage(file) {
     if (!file) return
     if (!file.type.startsWith('image/')) {
@@ -90,6 +110,7 @@ export default function App() {
       speak('This image is larger than 12 MB. Please choose a smaller photo.')
       return
     }
+    cachedOcrRef.current = { imageKey: '', result: null }
     setImageFile(file)
     setImageUrl(URL.createObjectURL(file))
     setText('')
@@ -127,7 +148,7 @@ export default function App() {
   }
 
   function prepareOcrCanvas(image, mode = 'grayscale') {
-    const maxDimension = 2200
+    const maxDimension = 1600
     const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight))
     const width = Math.max(1, Math.round(image.naturalWidth * scale))
     const height = Math.max(1, Math.round(image.naturalHeight * scale))
@@ -478,15 +499,24 @@ export default function App() {
 
     if (busy || cameraCheckInProgressRef.current) return
 
+    const cachedResult = getCachedOcrResult(imageFile)
+    let extracted = cachedResult?.text || ''
+    let confidence = cachedResult?.confidence ?? null
+
     setBusy(true)
     setProgress(0)
-    setStatus('Preparing the image for OCR. Please wait.')
-    speak('Preparing the image for OCR. Please wait.')
 
     try {
-      const result = await recognizePreparedText(imageFile, '6')
-      const extracted = result.text
-      const confidence = result.confidence
+      if (!extracted) {
+        setStatus('Preparing the image for OCR. Please wait.')
+        speak('Preparing the image for OCR. Please wait.')
+
+        const result = await recognizePreparedText(imageFile, '6')
+        extracted = result.text
+        confidence = result.confidence
+        setCachedOcrResult(imageFile, { text: extracted, confidence })
+      }
+
       setOcrConfidence(confidence)
 
       if (!extracted) {
@@ -496,12 +526,14 @@ export default function App() {
         return
       }
 
+      setText(extracted)
+
       let readingText = extracted
       try {
         readingText = await callAppReadTextApi(extracted, 'selected photo')
         setText(readingText)
 
-        if (confidence < 60) {
+        if ((confidence ?? 100) < 60) {
           const warning = 'OCR confidence is low. Please verify the result against the original label or cover.'
           setStatus(`Text extraction finished. ${warning}`)
           speak(`${warning} ${readingText}`)
@@ -511,7 +543,6 @@ export default function App() {
         }
       } catch (error) {
         console.error('Backend MCP reading failed:', error)
-        setText(extracted)
         setStatus('The reading service failed. The local OCR text is shown below, but please verify important details manually.')
         speak(`The reading service failed. ${extracted}`)
       }

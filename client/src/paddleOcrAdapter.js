@@ -19,10 +19,30 @@ export async function getPaddleOcrEngine() {
 
       ocrEngine = engine
       return engine
-    })()
+    })().catch(error => {
+      initPromise = null
+      throw error
+    })
   }
 
   return initPromise
+}
+
+export async function disposePaddleOcrEngine() {
+  if (!ocrEngine) {
+    ocrEngine = null
+    initPromise = null
+    return
+  }
+
+  try {
+    if (typeof ocrEngine.dispose === 'function') {
+      await ocrEngine.dispose()
+    }
+  } finally {
+    ocrEngine = null
+    initPromise = null
+  }
 }
 
 export async function recognizeWithPaddleOcr(file) {
